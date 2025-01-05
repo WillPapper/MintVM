@@ -1,10 +1,30 @@
 use rusqlite::{Connection, Result};
 
 #[derive(Debug)]
-struct Person {
+struct Transactions {
     id: i32,
-    name: String,
+    transaction_type: TransactionType,
     data: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum TransactionType {
+    CreateToken,
+    AddTokenSigner,
+    RemoveTokenSigner,
+    SetDefaultTokenURI,
+    SetTokenURIPerId,
+    Mint,
+    Transfer,
+    Burn,
+    Approve,
+    SetApprovalForAll,
+}
+
+impl TransactionTypeToSql for TransactionType {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(self.to_string()))
+    }
 }
 
 fn main() -> Result<()> {
