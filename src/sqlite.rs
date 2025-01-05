@@ -1,4 +1,3 @@
-use std::fmt;
 use rusqlite::{Connection, Result, ToSql};
 use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
@@ -11,7 +10,7 @@ struct Transactions {
     data: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, strum::Display, strum::EnumString)]
 enum TransactionType {
     CreateToken,
     AddTokenSigner,
@@ -28,14 +27,6 @@ enum TransactionType {
 impl ToSql for TransactionType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.to_string()))
-    }
-}
-
-impl fmt::Display for TransactionType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Using Debug formatting is simplest for enums
-        // This will output the variant name as a string
-        write!(f, "{:?}", self)
     }
 }
 

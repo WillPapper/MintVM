@@ -15,6 +15,7 @@ edition = "2021"
 # is why it is not a default feature -- it could become hard to disable.
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
+strum = { version = "0.26", features = ["derive", "std"] }
 
 [[bin]]
 name = "sqlite"
