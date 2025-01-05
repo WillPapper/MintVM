@@ -68,20 +68,25 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
 }
 
 fn insert_transaction(conn: &Connection, transaction: &Transactions) -> Result<(), DatabaseError> {
-    // Rust enums are checked at compile time, so we don't need to check that the transaction type is valid
+    // Start a new transaction
+    let tx = conn.transaction()?;
 
+    // Rust enums are checked at compile time, so we don't need to check that
+    // the transaction type is valid
     // Error if data is null
-    // TODO: Error if data is not a valid signed Ethereum transaction
     if transaction.data.is_none() {
         return Err(DatabaseError::InvalidTransactionData(
             "Transaction data cannot be null - all transactions must contain signed data".to_string()
         ));
     }
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO transactions (transaction_type, data) VALUES (?1, ?2)",
         (&transaction.transaction_type, &transaction.data),
     )?;
+
+    // Commit the transaction
+    tx.commit()?;
 
     Ok(())
 }
