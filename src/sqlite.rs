@@ -5,6 +5,8 @@ use rusqlite::{Connection, Result, ToSql};
 use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use alloy::primitives::{Address, keccak256};
+use std::str::FromStr;
 
 #[derive(Debug)]
 struct Transactions {
@@ -101,10 +103,38 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
         rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
         |ctx| {
             let transaction_id: i64 = ctx.get::<i64>(0)?;
-            // Example: Create a deterministic address from transaction_id
-            let mut address = [0u8; 20];
-            address[0..8].copy_from_slice(&transaction_id.to_le_bytes());
-            Ok(address.to_vec())
+            
+            // CREATE2 address derivation
+            // address = keccak256(0xff ++ deployerAddress ++ salt ++ keccak256(initCode))[12:]
+            
+            // Using a fixed deployer address and init code for this example
+            // In production, these should be parameters or configured constants
+            // TODO: Change to sender of bridge address
+            let deployer = EthereumAddress::from_str("0x0000000000000000000000000000000000000010").unwrap();
+            
+            // This should be your actual contract init code
+            // TODO: Change to ERC-721/20/1155 init code
+            let init_code = hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+            
+            // Calculate keccak256(initCode)
+            let init_code_hash = keccak256(&init_code);
+            
+            // Prepare the CREATE2 input buffer
+            let mut buffer = Vec::with_capacity(85); // 1 + 20 + 32 + 32
+            buffer.push(0xff);
+            buffer.extend_from_slice(&deployer.0);
+            
+            // Use transaction_id as salt, padded to 32 bytes
+            let mut salt = [0u8; 32];
+            // We want to pad the address to the right so that transaction ID comes at the end
+            salt[24..32].copy_from_slice(&transaction_id.to_be_bytes());
+            buffer.extend_from_slice(&salt);
+            
+            buffer.extend_from_slice(&init_code_hash);
+            
+            // Calculate final hash and take last 20 bytes for the address
+            let address_bytes = &keccak256(&buffer)[12..];
+            Ok(address_bytes.to_vec())
         }
     )?;
 
