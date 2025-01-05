@@ -93,6 +93,20 @@ fn main() -> Result<(), DatabaseError> {
 
 fn initialize_db() -> Result<Connection, DatabaseError> {
     let conn = Connection::open_in_memory()?;
+    
+    // Register custom functions first
+    conn.create_scalar_function(
+        "derive_contract_address",
+        1,
+        rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            let transaction_id: i64 = ctx.get::<i64>(0)?;
+            // Example: Create a deterministic address from transaction_id
+            let mut address = [0u8; 20];
+            address[0..8].copy_from_slice(&transaction_id.to_le_bytes());
+            Ok(address.to_vec())
+        }
+    )?;
 
     // Change ID to use the ID from the smart contract once written
     // For now we'll auto-increment for testing purposes, but later on we'll use
@@ -117,6 +131,21 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             signers BLOB,
             transaction_id INTEGER NOT NULL UNIQUE
         )",
+        (),
+    )?;
+
+    // Create a trigger to automatically create a new contract when a
+    // TransactionType of CreateToken is inserted. Uses a custom function to
+    // derive the contract address from the transaction ID
+    // Down the road, this can be updated with a salt so that the contract is
+    // synced with CREATE2
+    conn.execute(
+        "CREATE TRIGGER create_contract_trigger AFTER INSERT ON transactions
+        WHEN NEW.transaction_type = 'CreateToken'
+        BEGIN
+            INSERT INTO contracts (address, signers, transaction_id) 
+            VALUES (derive_contract_address(NEW.id), NEW.sender, NEW.id);
+        END",
         (),
     )?;
 
