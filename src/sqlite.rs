@@ -9,23 +9,22 @@ use alloy::primitives::{Address, keccak256};
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
-struct EthereumAddress(Address);
+struct AddressSqlite(Address);
 
-impl ToSql for EthereumAddress {
+impl ToSql for AddressSqlite {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.0.as_slice()))
     }
 }
 
-// Convenience methods to convert between Address (Alloy) and EthereumAddress (Used for ToSql)
-impl From<Address> for EthereumAddress {
+impl From<Address> for AddressSqlite {
     fn from(addr: Address) -> Self {
-        EthereumAddress(addr)
+        AddressSqlite(addr)
     }
 }
 
-impl From<EthereumAddress> for Address {
-    fn from(addr: EthereumAddress) -> Self {
+impl From<AddressSqlite> for Address {
+    fn from(addr: AddressSqlite) -> Self {
         addr.0
     }
 }
@@ -33,7 +32,7 @@ impl From<EthereumAddress> for Address {
 #[derive(Debug)]
 struct Transactions {
     id: i32,
-    sender: EthereumAddress,
+    sender: AddressSqlite,
     transaction_type: TransactionType,
     data: Vec<u8>,
     timestamp: i64,
@@ -62,8 +61,8 @@ impl ToSql for TransactionType {
 #[derive(Debug)]
 struct Contracts {
     id: i32,
-    address: EthereumAddress,
-    signers: Vec<EthereumAddress>,
+    address: AddressSqlite,
+    signers: Vec<AddressSqlite>,
     transaction_id: i32,
 }
 
@@ -99,7 +98,7 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             // Using a fixed deployer address and init code for this example
             // In production, these should be parameters or configured constants
             // TODO: Change to sender of bridge address
-            let deployer = EthereumAddress::from(
+            let deployer = AddressSqlite::from(
                 Address::from_str("0x4000000000000000000000000000000000000000").unwrap()
             );
             
@@ -206,7 +205,7 @@ mod tests {
         let mut conn = initialize_db().unwrap();
         let transaction = Transactions {
             id: 0,
-            sender: EthereumAddress::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            sender: AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
             transaction_type: TransactionType::CreateToken,
             data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
