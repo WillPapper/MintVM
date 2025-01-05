@@ -11,7 +11,7 @@ struct Transactions {
     id: i32,
     transaction_type: TransactionType,
     // Signed TX data as bytes
-    data: Option<Vec<u8>>,
+    data: Vec<u8>,
     // Fetched from the metabased chain. Used to derive the block number
     timestamp: i64,
 }
@@ -117,12 +117,6 @@ fn insert_transaction(conn: &mut Connection, transaction: &Transactions) -> Resu
 
     // Rust enums are checked at compile time, so we don't need to check that
     // the transaction type is valid
-    // Error if data is null
-    if transaction.data.is_none() {
-        return Err(DatabaseError::InvalidTransactionData(
-            "Transaction data cannot be null - all transactions must contain signed data".to_string()
-        ));
-    }
 
     tx.execute(
         "INSERT INTO transactions (transaction_type, data, timestamp) VALUES (?1, ?2, ?3)",
@@ -150,7 +144,7 @@ mod tests {
         let transaction = Transactions {
             id: 0,
             transaction_type: TransactionType::CreateToken,
-            data: Some("0x".as_bytes().to_vec()),
+            data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
         };
         insert_transaction(&mut conn, &transaction).unwrap();
