@@ -9,6 +9,10 @@ use thiserror::Error;
 #[derive(Debug)]
 struct Transactions {
     id: i32,
+    // The sender of a transaction. This is the user who signed and authorized a
+    // transaction, not the message sender that eventually sequenced the
+    // transaction on the metabased chain
+    sender: EthereumAddress,
     transaction_type: TransactionType,
     // Signed TX data as bytes
     data: Vec<u8>,
@@ -56,6 +60,14 @@ impl EthereumAddress {
     }
 }
 
+// Automatically convert EthereumAddress to a BLOB by getting the first element
+// of the tuple
+impl ToSql for EthereumAddress {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(&self.0[..]))
+    }
+}
+
 #[derive(Debug)]
 struct Contracts {
     id: i32,
@@ -88,6 +100,7 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
     conn.execute(
         "CREATE TABLE transactions(
             id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender BLOB NOT NULL,
             transaction_type TEXT NOT NULL,
             data  BLOB,
             timestamp INTEGER NOT NULL
@@ -119,8 +132,8 @@ fn insert_transaction(conn: &mut Connection, transaction: &Transactions) -> Resu
     // the transaction type is valid
 
     tx.execute(
-        "INSERT INTO transactions (transaction_type, data, timestamp) VALUES (?1, ?2, ?3)",
-        (&transaction.transaction_type, &transaction.data, &transaction.timestamp),
+        "INSERT INTO transactions (sender, transaction_type, data, timestamp) VALUES (?1, ?2, ?3, ?4)",
+        (&transaction.sender, &transaction.transaction_type, &transaction.data, &transaction.timestamp),
     )?;
 
     // Commit the transaction
@@ -143,6 +156,7 @@ mod tests {
         let mut conn = initialize_db().unwrap();
         let transaction = Transactions {
             id: 0,
+            sender: EthereumAddress::new("0x0000000000000000000000000000000000000001").unwrap(),
             transaction_type: TransactionType::CreateToken,
             data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
