@@ -36,9 +36,12 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn initialize_db() -> Result<(), rusqlite::Error> {
+fn initialize_db() -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open_in_memory()?;
 
+    // Change ID to use the ID from the smart contract once written
+    // For now we'll auto-increment for testing purposes, but later on we'll use
+    // the ID from the smart contract
     conn.execute(
         "CREATE TABLE transactions(
             id    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +49,9 @@ fn initialize_db() -> Result<(), rusqlite::Error> {
             data  BLOB
         )",
         (), // empty list of parameters.
-    )?
+    )?;
+
+    Ok(conn)
 }
 
 #[cfg(test)]
