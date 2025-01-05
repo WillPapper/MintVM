@@ -5,7 +5,6 @@ use rusqlite::{Connection, Result, ToSql};
 use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-use hex;
 
 #[derive(Debug)]
 struct Transactions {
