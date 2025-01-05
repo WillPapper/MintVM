@@ -8,17 +8,34 @@ use thiserror::Error;
 use alloy::primitives::{Address, keccak256};
 use std::str::FromStr;
 
+#[derive(Debug, Clone, Copy)]
+struct EthereumAddress(Address);
+
+impl ToSql for EthereumAddress {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(self.0.as_slice()))
+    }
+}
+
+// Convenience methods to convert between Address (Alloy) and EthereumAddress (Used for ToSql)
+impl From<Address> for EthereumAddress {
+    fn from(addr: Address) -> Self {
+        EthereumAddress(addr)
+    }
+}
+
+impl From<EthereumAddress> for Address {
+    fn from(addr: EthereumAddress) -> Self {
+        addr.0
+    }
+}
+
 #[derive(Debug)]
 struct Transactions {
     id: i32,
-    // The sender of a transaction. This is the user who signed and authorized a
-    // transaction, not the message sender that eventually sequenced the
-    // transaction on the metabased chain
     sender: EthereumAddress,
     transaction_type: TransactionType,
-    // Signed TX data as bytes
     data: Vec<u8>,
-    // Fetched from the metabased chain. Used to derive the block number
     timestamp: i64,
 }
 
@@ -39,34 +56,6 @@ enum TransactionType {
 impl ToSql for TransactionType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.to_string()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct EthereumAddress([u8; 20]);
-
-impl EthereumAddress {
-    pub fn new(hex_string: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let hex = hex_string.strip_prefix("0x").unwrap_or(hex_string);
-        let bytes = hex::decode(hex)?;
-        if bytes.len() != 20 {
-            return Err("Invalid Ethereum address length".into());
-        }
-        let mut address = [0u8; 20];
-        address.copy_from_slice(&bytes);
-        Ok(EthereumAddress(address))
-    }
-
-    pub fn to_hex_string(&self) -> String {
-        format!("0x{}", hex::encode(self.0))
-    }
-}
-
-// Automatically convert EthereumAddress to a BLOB by getting the first element
-// of the tuple
-impl ToSql for EthereumAddress {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::from(&self.0[..]))
     }
 }
 
@@ -110,7 +99,9 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             // Using a fixed deployer address and init code for this example
             // In production, these should be parameters or configured constants
             // TODO: Change to sender of bridge address
-            let deployer = EthereumAddress::from_str("0x0000000000000000000000000000000000000010").unwrap();
+            let deployer = EthereumAddress::from(
+                Address::from_str("0x4000000000000000000000000000000000000000").unwrap()
+            );
             
             // This should be your actual contract init code
             // TODO: Change to ERC-721/20/1155 init code
@@ -122,7 +113,7 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             // Prepare the CREATE2 input buffer
             let mut buffer = Vec::with_capacity(85); // 1 + 20 + 32 + 32
             buffer.push(0xff);
-            buffer.extend_from_slice(&deployer.0);
+            buffer.extend_from_slice(deployer.0.as_slice());
             
             // Use transaction_id as salt, padded to 32 bytes
             let mut salt = [0u8; 32];
@@ -130,7 +121,7 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             salt[24..32].copy_from_slice(&transaction_id.to_be_bytes());
             buffer.extend_from_slice(&salt);
             
-            buffer.extend_from_slice(&init_code_hash);
+            buffer.extend_from_slice(init_code_hash.as_slice());
             
             // Calculate final hash and take last 20 bytes for the address
             let address_bytes = &keccak256(&buffer)[12..];
@@ -215,7 +206,7 @@ mod tests {
         let mut conn = initialize_db().unwrap();
         let transaction = Transactions {
             id: 0,
-            sender: EthereumAddress::new("0x0000000000000000000000000000000000000001").unwrap(),
+            sender: EthereumAddress::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
             transaction_type: TransactionType::CreateToken,
             data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
