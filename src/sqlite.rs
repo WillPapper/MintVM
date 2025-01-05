@@ -12,6 +12,8 @@ struct Transactions {
     transaction_type: TransactionType,
     // Signed TX data as bytes
     data: Option<Vec<u8>>,
+    // Fetched from the metabased chain. Used to derive the block number
+    timestamp: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, strum::Display, strum::EnumString)]
@@ -59,7 +61,8 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
         "CREATE TABLE transactions(
             id    INTEGER PRIMARY KEY AUTOINCREMENT,
             transaction_type TEXT NOT NULL,
-            data  BLOB
+            data  BLOB,
+            timestamp INTEGER NOT NULL
         )",
         (), // empty list of parameters.
     )?;
@@ -67,7 +70,8 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
     Ok(conn)
 }
 
-fn insert_transaction(conn: &Connection, transaction: &Transactions) -> Result<(), DatabaseError> {
+// Connection must be mutable because commitments mutate the connection
+fn insert_transaction(conn: &mut Connection, transaction: &Transactions) -> Result<(), DatabaseError> {
     // Start a new transaction
     let tx = conn.transaction()?;
 
@@ -81,8 +85,8 @@ fn insert_transaction(conn: &Connection, transaction: &Transactions) -> Result<(
     }
 
     tx.execute(
-        "INSERT INTO transactions (transaction_type, data) VALUES (?1, ?2)",
-        (&transaction.transaction_type, &transaction.data),
+        "INSERT INTO transactions (transaction_type, data, timestamp) VALUES (?1, ?2, ?3)",
+        (&transaction.transaction_type, &transaction.data, &transaction.timestamp),
     )?;
 
     // Commit the transaction
@@ -102,12 +106,13 @@ mod tests {
 
     #[test]
     fn test_insert_transaction() {
-        let conn = initialize_db().unwrap();
+        let mut conn = initialize_db().unwrap();
         let transaction = Transactions {
             id: 0,
             transaction_type: TransactionType::CreateToken,
             data: Some("0x".as_bytes().to_vec()),
+            timestamp: 1715136000,
         };
-        insert_transaction(&conn, &transaction).unwrap();
+        insert_transaction(&mut conn, &transaction).unwrap();
     }
 }
