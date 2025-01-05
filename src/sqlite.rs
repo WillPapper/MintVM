@@ -42,3 +42,13 @@ fn main() -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_main() {
+        assert!(main().is_ok());
+    }
+}
