@@ -4,6 +4,7 @@
 use rusqlite::{Connection, Result, ToSql};
 use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
 #[derive(Debug)]
 struct Transactions {
@@ -33,29 +34,14 @@ impl ToSql for TransactionType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
-    SqliteError(rusqlite::Error),
+    #[error("Database error: {0}")]
+    SqliteError(#[from] rusqlite::Error),
+    #[error("Invalid transaction type: {0}")]
     InvalidTransactionType(String),
+    #[error("Invalid transaction data: {0}")]
     InvalidTransactionData(String),
-}
-
-impl std::error::Error for DatabaseError {}
-
-impl std::fmt::Display for DatabaseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            DatabaseError::SqliteError(e) => write!(f, "Database error: {}", e),
-            DatabaseError::InvalidTransactionType(msg) => write!(f, "Invalid transaction type: {}", msg),
-            DatabaseError::InvalidTransactionData(msg) => write!(f, "Invalid transaction data: {}", msg),
-        }
-    }
-}
-
-impl From<rusqlite::Error> for DatabaseError {
-    fn from(err: rusqlite::Error) -> DatabaseError {
-        DatabaseError::SqliteError(err)
-    }
 }
 
 fn main() -> Result<(), DatabaseError> {
