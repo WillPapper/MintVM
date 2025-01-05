@@ -5,6 +5,7 @@ use rusqlite::{Connection, Result, ToSql};
 use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
+use hex;
 
 #[derive(Debug)]
 struct Transactions {
@@ -36,6 +37,34 @@ impl ToSql for TransactionType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EthereumAddress([u8; 20]);
+
+impl EthereumAddress {
+    pub fn new(hex_string: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let hex = hex_string.strip_prefix("0x").unwrap_or(hex_string);
+        let bytes = hex::decode(hex)?;
+        if bytes.len() != 20 {
+            return Err("Invalid Ethereum address length".into());
+        }
+        let mut address = [0u8; 20];
+        address.copy_from_slice(&bytes);
+        Ok(EthereumAddress(address))
+    }
+
+    pub fn to_hex_string(&self) -> String {
+        format!("0x{}", hex::encode(self.0))
+    }
+}
+
+#[derive(Debug)]
+struct Contracts {
+    id: i32,
+    address: EthereumAddress,
+    signers: Vec<EthereumAddress>,
+    transaction_id: i32,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
     #[error("Database error: {0}")]
@@ -65,6 +94,18 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
             timestamp INTEGER NOT NULL
         )",
         (), // empty list of parameters.
+    )?;
+
+    // Create a table for contract addresses
+    // Contract addresses are unique. Transactions and contracts are 1:1 and also unique
+    conn.execute(
+        "CREATE TABLE contracts(
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            address BLOB NOT NULL UNIQUE,
+            signers BLOB,
+            transaction_id INTEGER NOT NULL UNIQUE
+        )",
+        (),
     )?;
 
     Ok(conn)
