@@ -71,11 +71,58 @@ impl FromSql for TransactionType {
     }
 }
 
+struct AddressSqliteList(Vec<AddressSqlite>);
+
+// Show AddressSqliteList as a comma-separated list of addresses
+impl std::fmt::Debug for AddressSqliteList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        for (i, addr) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{}", addr)?;
+        }
+        f.write_str("]")
+    }
+}
+
+impl ToSql for AddressSqliteList {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
+        let mut bytes = Vec::with_capacity(self.0.len() * 20);
+        for addr in &self.0 {
+            bytes.extend_from_slice(addr.0.as_slice());
+        }
+        Ok(ToSqlOutput::from(bytes))
+    }
+}
+
+impl FromSql for AddressSqliteList {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match value {
+            rusqlite::types::ValueRef::Blob(bytes) => {
+                if bytes.len() % 20 != 0 {
+                    return Err(rusqlite::types::FromSqlError::InvalidType);
+                }
+                let addresses = bytes.chunks_exact(20)
+                    .map(|chunk| {
+                        let mut array = [0u8; 20];
+                        array.copy_from_slice(chunk);
+                        AddressSqlite(Address::from_slice(&array))
+                    })
+                    .collect();
+                Ok(AddressSqliteList(addresses))
+            }
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Contracts {
     id: i32,
     address: AddressSqlite,
-    signers: Vec<AddressSqlite>,
+    signers: AddressSqliteList,
     transaction_id: i32,
 }
 
