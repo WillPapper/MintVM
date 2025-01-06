@@ -7,6 +7,8 @@ use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use alloy::primitives::{Address, keccak256};
 use derive_more::{From, Display, FromStr};
+use rusqlite::Row;
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Copy, From, Display, FromStr)]
 #[display("{}", _0)]
@@ -124,6 +126,46 @@ struct Contracts {
     address: AddressSqlite,
     signers: AddressSqliteList,
     transaction_id: i32,
+}
+
+impl TryFrom<&Row<'_>> for Contracts {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &Row) -> Result<Self, Self::Error> {
+        Ok(Contracts {
+            id: row.get(0)?,
+            address: row.get(1)?,
+            signers: row.get(2)?,
+            transaction_id: row.get(3)?,
+        })
+    }
+}
+
+impl Contracts {
+    // These getters are guaranteed to be unique based on the table constraints
+    fn get_by_id(conn: &Connection, id: i32) -> Result<Self, rusqlite::Error> {
+        conn.query_row(
+            "SELECT * FROM contracts WHERE id = ?",
+            [id],
+            |row| Ok(Self::try_from(row)?)
+        )
+    }
+
+    fn get_by_address(conn: &Connection, address: AddressSqlite) -> Result<Self, rusqlite::Error> {
+        conn.query_row(
+            "SELECT * FROM contracts WHERE address = ?",
+            [address],
+            |row| Ok(Self::try_from(row)?)
+        )
+    }
+
+    fn get_by_transaction_id(conn: &Connection, tx_id: i32) -> Result<Self, rusqlite::Error> {
+        conn.query_row(
+            "SELECT * FROM contracts WHERE transaction_id = ?",
+            [tx_id],
+            |row| Ok(Self::try_from(row)?)
+        )
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -285,15 +327,30 @@ mod tests {
         println!("Transaction row: {:?}", transaction_row);
 
         // Run queries to confirm that the contract was created
-        let contract_row = conn.query_row("SELECT * FROM contracts", [], |row| {
-            Ok((
-                row.get::<usize, i32>(0)?, // id
-                row.get::<usize, AddressSqlite>(1)?, // address
-                row.get::<usize, AddressSqliteList>(2)?, // signers (BLOB)
-                row.get::<usize, i32>(3)?, // transaction_id
-            ))
-        })?;
-        println!("Contract row: {:?}", contract_row);
+        // Then use get_by_id to fetch the specific contract we just created
+        let contract = Contracts::get_by_id(&conn, 1)?;  // We know ID is 1 since it's the first record
+        println!("Contract row: {:?}", contract);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_contract() -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = initialize_db()?;
+        
+        // First insert a transaction that will create a contract
+        let transaction = Transactions {
+            id: 0,
+            sender: AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            transaction_type: TransactionType::CreateToken,
+            data: "0x".as_bytes().to_vec(),
+            timestamp: 1715136000,
+        };
+        insert_transaction(&mut conn, &transaction)?;
+
+        // Now we can fetch the contract using get_by_id
+        let contract = Contracts::get_by_id(&conn, 1)?;
+        println!("Found contract: {:?}", contract);
 
         Ok(())
     }
