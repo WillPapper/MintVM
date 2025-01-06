@@ -201,8 +201,8 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_transaction() {
-        let mut conn = initialize_db().unwrap();
+    fn test_insert_transaction() -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = initialize_db()?;
         let transaction = Transactions {
             id: 0,
             sender: AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
@@ -210,6 +210,20 @@ mod tests {
             data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
         };
-        insert_transaction(&mut conn, &transaction).unwrap();
+        insert_transaction(&mut conn, &transaction)?;
+
+        // Run queries to confirm that the transaction was inserted
+        let transaction_id = conn.query_row("SELECT * FROM transactions", [], |row| {
+            row.get::<usize, i32>(0)
+        })?;
+        println!("Transaction inserted: {}", transaction_id);
+
+        // Run queries to confirm that the contract was created
+        let contract_id = conn.query_row("SELECT * FROM contracts", [], |row| {
+            row.get::<usize, i32>(0)
+        })?;
+        println!("Contract created: {}", contract_id);
+
+        Ok(())
     }
 }
