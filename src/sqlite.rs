@@ -29,6 +29,22 @@ impl From<AddressSqlite> for Address {
     }
 }
 
+impl rusqlite::types::FromSql for AddressSqlite {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match value {
+            rusqlite::types::ValueRef::Blob(bytes) => {
+                if bytes.len() != 20 {
+                    return Err(rusqlite::types::FromSqlError::InvalidType);
+                }
+                let mut array = [0u8; 20];
+                array.copy_from_slice(bytes);
+                Ok(AddressSqlite(Address::from_slice(&array)))
+            }
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Transactions {
     id: i32,
@@ -213,16 +229,27 @@ mod tests {
         insert_transaction(&mut conn, &transaction)?;
 
         // Run queries to confirm that the transaction was inserted
-        let transaction_id = conn.query_row("SELECT * FROM transactions", [], |row| {
-            row.get::<usize, i32>(0)
+        let transaction_row = conn.query_row("SELECT * FROM transactions", [], |row| {
+            Ok((
+                row.get::<usize, i32>(0)?, // id
+                row.get::<usize, AddressSqlite>(1)?, // sender
+                row.get::<usize, String>(2)?, // transaction_type
+                row.get::<usize, Vec<u8>>(3)?, // data
+                row.get::<usize, i64>(4)?, // timestamp
+            ))
         })?;
-        println!("Transaction inserted: {}", transaction_id);
+        println!("Transaction row: {:?}", transaction_row);
 
         // Run queries to confirm that the contract was created
-        let contract_id = conn.query_row("SELECT * FROM contracts", [], |row| {
-            row.get::<usize, i32>(0)
+        let contract_row = conn.query_row("SELECT * FROM contracts", [], |row| {
+            Ok((
+                row.get::<usize, i32>(0)?, // id
+                row.get::<usize, AddressSqlite>(1)?, // address
+                row.get::<usize, Vec<u8>>(2)?, // signers (BLOB)
+                row.get::<usize, i32>(3)?, // transaction_id
+            ))
         })?;
-        println!("Contract created: {}", contract_id);
+        println!("Contract row: {:?}", contract_row);
 
         Ok(())
     }
