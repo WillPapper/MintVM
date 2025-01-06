@@ -8,9 +8,10 @@ use thiserror::Error;
 use alloy::primitives::{Address, keccak256};
 use derive_more::{From, Display, FromStr};
 use rusqlite::Row;
+use rusqlite::named_params;
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone, Copy, From, Display, FromStr)]
+#[derive(Debug, Clone, Copy, From, Display, FromStr, PartialEq)]
 #[display("{}", _0)]
 struct AddressSqlite(Address);
 
@@ -45,7 +46,7 @@ struct Transactions {
     timestamp: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(Debug, Serialize, Deserialize, strum::Display, strum::EnumString, PartialEq)]
 enum TransactionType {
     CreateToken,
     AddTokenSigner,
@@ -204,6 +205,38 @@ impl Transactions {
         let transactions_iter = stmt.query_map([tx_type], |row| Ok(Self::try_from(row)?))?;
         
         // Collect and handle potential errors in the iterator
+        transactions_iter.collect::<Result<Vec<_>, _>>()
+    }
+
+    fn get_by_type_and_sender(
+        conn: &Connection, 
+        tx_type: TransactionType,
+        sender: AddressSqlite
+    ) -> Result<Vec<Self>, rusqlite::Error> {
+        let mut stmt = conn.prepare(
+            "SELECT * FROM transactions WHERE transaction_type = :type AND sender = :sender"
+        )?;
+        let transactions_iter = stmt.query_map(
+            named_params! {":type": tx_type, ":sender": sender},
+            |row| Ok(Self::try_from(row)?)
+        )?;
+        
+        transactions_iter.collect::<Result<Vec<_>, _>>()
+    }
+
+    fn get_by_type_after_timestamp(
+        conn: &Connection,
+        tx_type: TransactionType,
+        timestamp: i64
+    ) -> Result<Vec<Self>, rusqlite::Error> {
+        let mut stmt = conn.prepare(
+            "SELECT * FROM transactions WHERE transaction_type = :type AND timestamp > :ts"
+        )?;
+        let transactions_iter = stmt.query_map(
+            named_params! {":type": tx_type, ":ts": timestamp},
+            |row| Ok(Self::try_from(row)?)
+        )?;
+        
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 }
@@ -391,6 +424,89 @@ mod tests {
         // Now we can fetch the contract using get_by_id
         let contract = Contracts::get_by_id(&conn, 1)?;
         println!("Found contract: {:?}", contract);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiple_transactions() -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = initialize_db()?;
+        
+        // Create test data
+        let sender1 = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        let sender2 = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000002").unwrap());
+        
+        let test_transactions = vec![
+            Transactions {
+                id: 0,
+                sender: sender1,
+                transaction_type: TransactionType::CreateToken,
+                data: b"token1".to_vec(),
+                timestamp: 1000,
+            },
+            Transactions {
+                id: 0,
+                sender: sender1,
+                transaction_type: TransactionType::Mint,
+                data: b"mint1".to_vec(),
+                timestamp: 1001,
+            },
+            Transactions {
+                id: 0,
+                sender: sender2,
+                transaction_type: TransactionType::CreateToken,
+                data: b"token2".to_vec(),
+                timestamp: 1002,
+            },
+            Transactions {
+                id: 0,
+                sender: sender2,
+                transaction_type: TransactionType::Transfer,
+                data: b"transfer1".to_vec(),
+                timestamp: 1003,
+            },
+        ];
+
+        // Insert all transactions
+        for tx in &test_transactions {
+            insert_transaction(&mut conn, tx)?;
+        }
+
+        // Test different query methods
+        
+        // 1. Get all CreateToken transactions
+        let create_txs = Transactions::get_by_type(&conn, TransactionType::CreateToken)?;
+        assert_eq!(create_txs.len(), 2);
+        assert!(create_txs.iter().all(|tx| tx.transaction_type == TransactionType::CreateToken));
+
+        // 2. Get all transactions from sender1
+        let sender1_txs = Transactions::get_by_sender(&conn, sender1)?;
+        assert_eq!(sender1_txs.len(), 2);
+        assert!(sender1_txs.iter().all(|tx| tx.sender == sender1));
+
+        // 3. Get CreateToken transactions from sender2
+        let sender2_create_txs = Transactions::get_by_type_and_sender(
+            &conn,
+            TransactionType::CreateToken,
+            sender2
+        )?;
+        assert_eq!(sender2_create_txs.len(), 1);
+        assert_eq!(sender2_create_txs[0].data, b"token2");
+
+        // 4. Get transactions after timestamp 1001
+        let recent_txs = Transactions::get_by_type_after_timestamp(
+            &conn,
+            TransactionType::CreateToken,
+            1001
+        )?;
+        assert_eq!(recent_txs.len(), 1);
+        assert_eq!(recent_txs[0].sender, sender2);
+
+        // 5. Verify we can get each transaction by ID
+        for i in 1..=4 {
+            let tx = Transactions::get_by_id(&conn, i)?;
+            println!("Transaction {}: {:?}", i, tx);
+        }
 
         Ok(())
     }
