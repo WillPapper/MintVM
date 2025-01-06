@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use rusqlite::{Connection, Result, ToSql};
-use rusqlite::types::ToSqlOutput;
+use rusqlite::types::{ToSqlOutput, FromSql};
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use alloy::primitives::{Address, keccak256};
@@ -60,6 +60,14 @@ enum TransactionType {
 impl ToSql for TransactionType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.to_string()))
+    }
+}
+
+impl FromSql for TransactionType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let text = value.as_str()?;
+        text.parse()
+            .map_err(|_| rusqlite::types::FromSqlError::InvalidType)
     }
 }
 
