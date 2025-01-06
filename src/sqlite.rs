@@ -378,31 +378,32 @@ mod tests {
     #[test]
     fn test_insert_transaction() -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = initialize_db()?;
+        let sender = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        let test_data = "0x".as_bytes().to_vec();
+        let test_timestamp = 1715136000;
+
         let transaction = Transactions {
             id: 0,
-            sender: AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            sender,
             transaction_type: TransactionType::CreateToken,
-            data: "0x".as_bytes().to_vec(),
-            timestamp: 1715136000,
+            data: test_data.clone(),
+            timestamp: test_timestamp,
         };
         insert_transaction(&mut conn, &transaction)?;
 
-        // Run queries to confirm that the transaction was inserted
-        let transaction_row = conn.query_row("SELECT * FROM transactions", [], |row| {
-            Ok((
-                row.get::<usize, i32>(0)?, // id
-                row.get::<usize, AddressSqlite>(1)?, // sender
-                row.get::<usize, TransactionType>(2)?, // transaction_type
-                row.get::<usize, Vec<u8>>(3)?, // data
-                row.get::<usize, i64>(4)?, // timestamp
-            ))
-        })?;
-        println!("Transaction row: {:?}", transaction_row);
+        // Use getter instead of direct row access
+        let saved_transaction = Transactions::get_by_id(&conn, 1)?;
+        
+        assert_eq!(saved_transaction.id, 1); // First record should have ID 1
+        assert_eq!(saved_transaction.sender, sender);
+        assert_eq!(saved_transaction.transaction_type, TransactionType::CreateToken);
+        assert_eq!(saved_transaction.data, test_data);
+        assert_eq!(saved_transaction.timestamp, test_timestamp);
 
-        // Run queries to confirm that the contract was created
-        // Then use get_by_id to fetch the specific contract we just created
-        let contract = Contracts::get_by_id(&conn, 1)?;  // We know ID is 1 since it's the first record
-        println!("Contract row: {:?}", contract);
+        // Verify contract was created
+        let contract = Contracts::get_by_id(&conn, 1)?;
+        assert_eq!(contract.transaction_id, 1);
+        assert_eq!(contract.signers.0, vec![sender]); // Verify sender is set as initial signer
 
         Ok(())
     }
