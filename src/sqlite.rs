@@ -411,20 +411,37 @@ mod tests {
     #[test]
     fn test_get_contract() -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = initialize_db()?;
+        let sender = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
         
         // First insert a transaction that will create a contract
         let transaction = Transactions {
             id: 0,
-            sender: AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            sender,
             transaction_type: TransactionType::CreateToken,
             data: "0x".as_bytes().to_vec(),
             timestamp: 1715136000,
         };
         insert_transaction(&mut conn, &transaction)?;
 
-        // Now we can fetch the contract using get_by_id
+        // Get contract by ID
         let contract = Contracts::get_by_id(&conn, 1)?;
-        println!("Found contract: {:?}", contract);
+        assert_eq!(contract.id, 1);
+        assert_eq!(contract.transaction_id, 1);
+        assert_eq!(contract.signers.0, vec![sender]);
+
+        // Get contract by address and verify it matches
+        let contract_by_addr = Contracts::get_by_address(&conn, contract.address)?;
+        assert_eq!(contract_by_addr.id, contract.id);
+        assert_eq!(contract_by_addr.address, contract.address);
+        assert_eq!(contract_by_addr.signers.0, contract.signers.0);
+        assert_eq!(contract_by_addr.transaction_id, contract.transaction_id);
+
+        // Get contract by transaction ID and verify it matches
+        let contract_by_tx = Contracts::get_by_transaction_id(&conn, 1)?;
+        assert_eq!(contract_by_tx.id, contract.id);
+        assert_eq!(contract_by_tx.address, contract.address);
+        assert_eq!(contract_by_tx.signers.0, contract.signers.0);
+        assert_eq!(contract_by_tx.transaction_id, contract.transaction_id);
 
         Ok(())
     }
