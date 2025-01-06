@@ -6,26 +6,15 @@ use rusqlite::types::ToSqlOutput;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 use alloy::primitives::{Address, keccak256};
-use std::str::FromStr;
+use derive_more::{From, Display, FromStr};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, From, Display, FromStr)]
+#[display("{}", _0)]
 struct AddressSqlite(Address);
 
 impl ToSql for AddressSqlite {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(self.0.as_slice()))
-    }
-}
-
-impl From<Address> for AddressSqlite {
-    fn from(addr: Address) -> Self {
-        AddressSqlite(addr)
-    }
-}
-
-impl From<AddressSqlite> for Address {
-    fn from(addr: AddressSqlite) -> Self {
-        addr.0
     }
 }
 
