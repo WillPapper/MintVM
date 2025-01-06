@@ -277,7 +277,7 @@ mod tests {
             Ok((
                 row.get::<usize, i32>(0)?, // id
                 row.get::<usize, AddressSqlite>(1)?, // sender
-                row.get::<usize, String>(2)?, // transaction_type
+                row.get::<usize, TransactionType>(2)?, // transaction_type
                 row.get::<usize, Vec<u8>>(3)?, // data
                 row.get::<usize, i64>(4)?, // timestamp
             ))
@@ -289,7 +289,7 @@ mod tests {
             Ok((
                 row.get::<usize, i32>(0)?, // id
                 row.get::<usize, AddressSqlite>(1)?, // address
-                row.get::<usize, Vec<u8>>(2)?, // signers (BLOB)
+                row.get::<usize, AddressSqliteList>(2)?, // signers (BLOB)
                 row.get::<usize, i32>(3)?, // transaction_id
             ))
         })?;
