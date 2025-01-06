@@ -168,6 +168,46 @@ impl Contracts {
     }
 }
 
+impl TryFrom<&Row<'_>> for Transactions {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &Row) -> Result<Self, Self::Error> {
+        Ok(Transactions {
+            id: row.get(0)?,
+            sender: row.get(1)?,
+            transaction_type: row.get(2)?,
+            data: row.get(3)?,
+            timestamp: row.get(4)?,
+        })
+    }
+}
+
+impl Transactions {
+    fn get_by_id(conn: &Connection, id: i32) -> Result<Self, rusqlite::Error> {
+        conn.query_row(
+            "SELECT * FROM transactions WHERE id = ?",
+            [id],
+            |row| Ok(Self::try_from(row)?)
+        )
+    }
+
+    fn get_by_sender(conn: &Connection, sender: AddressSqlite) -> Result<Vec<Self>, rusqlite::Error> {
+        let mut stmt = conn.prepare("SELECT * FROM transactions WHERE sender = ?")?;
+        let transactions_iter = stmt.query_map([sender], |row| Ok(Self::try_from(row)?))?;
+        
+        // Collect and handle potential errors in the iterator
+        transactions_iter.collect::<Result<Vec<_>, _>>()
+    }
+
+    fn get_by_type(conn: &Connection, tx_type: TransactionType) -> Result<Vec<Self>, rusqlite::Error> {
+        let mut stmt = conn.prepare("SELECT * FROM transactions WHERE transaction_type = ?")?;
+        let transactions_iter = stmt.query_map([tx_type], |row| Ok(Self::try_from(row)?))?;
+        
+        // Collect and handle potential errors in the iterator
+        transactions_iter.collect::<Result<Vec<_>, _>>()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
     #[error("Database error: {0}")]
