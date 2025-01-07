@@ -1,4 +1,7 @@
-// Will handle setup tasks. See `src/sqlite.rs` for the current implementation.
-fn main() {
+mod jsonrpc;
+
+#[tokio::main]
+async fn main() {
     println!("MintVM started");
+    jsonrpc::run_server().await.expect("Failed to start JSON-RPC server");
 }

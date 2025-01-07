@@ -5,8 +5,12 @@ edition = "2021"
 
 [dependencies]
 alloy = "0.9.2"
+anyhow = "1.0"
 derive_more = "1.0.0"
 hex = "0.4.3"
+http-body-util = "0.1.2"
+hyper = { version = "1.5", features = ["full"] }
+jsonrpsee = { version = "0.24", features = ["server", "client", "http-client", "ws-client"] }
 # `bundled` causes us to automatically compile and link in an up to date
 # version of SQLite for you. This avoids many common build issues, and
 # avoids depending on the version of SQLite on the users system (or your
@@ -20,6 +24,11 @@ rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 serde = { version = "1.0", features = ["derive"] }
 strum = { version = "0.26", features = ["derive", "std"] }
 thiserror = "2.0.9"
+tokio = { version = "1.42", features = ["full", "rt", "rt-multi-thread", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[bin]]
 name = "sqlite"
