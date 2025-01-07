@@ -143,12 +143,11 @@ impl TryFrom<&Row<'_>> for Contracts {
 }
 
 impl Contracts {
-    // These getters are guaranteed to be unique based on the table constraints
     fn get_by_id(conn: &Connection, id: i32) -> Result<Self, rusqlite::Error> {
         conn.query_row(
             "SELECT * FROM contracts WHERE id = ?",
             [id],
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )
     }
 
@@ -156,7 +155,7 @@ impl Contracts {
         conn.query_row(
             "SELECT * FROM contracts WHERE address = ?",
             [address],
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )
     }
 
@@ -164,7 +163,7 @@ impl Contracts {
         conn.query_row(
             "SELECT * FROM contracts WHERE transaction_id = ?",
             [tx_id],
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )
     }
 }
@@ -188,23 +187,21 @@ impl Transactions {
         conn.query_row(
             "SELECT * FROM transactions WHERE id = ?",
             [id],
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )
     }
 
     fn get_by_sender(conn: &Connection, sender: AddressSqlite) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare("SELECT * FROM transactions WHERE sender = ?")?;
-        let transactions_iter = stmt.query_map([sender], |row| Ok(Self::try_from(row)?))?;
+        let transactions_iter = stmt.query_map([sender], |row| Self::try_from(row))?;
         
-        // Collect and handle potential errors in the iterator
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 
     fn get_by_type(conn: &Connection, tx_type: TransactionType) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare("SELECT * FROM transactions WHERE transaction_type = ?")?;
-        let transactions_iter = stmt.query_map([tx_type], |row| Ok(Self::try_from(row)?))?;
+        let transactions_iter = stmt.query_map([tx_type], |row| Self::try_from(row))?;
         
-        // Collect and handle potential errors in the iterator
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 
@@ -218,7 +215,7 @@ impl Transactions {
         )?;
         let transactions_iter = stmt.query_map(
             named_params! {":type": tx_type, ":sender": sender},
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )?;
         
         transactions_iter.collect::<Result<Vec<_>, _>>()
@@ -234,7 +231,7 @@ impl Transactions {
         )?;
         let transactions_iter = stmt.query_map(
             named_params! {":type": tx_type, ":ts": timestamp},
-            |row| Ok(Self::try_from(row)?)
+            |row| Self::try_from(row)
         )?;
         
         transactions_iter.collect::<Result<Vec<_>, _>>()
