@@ -1,3 +1,1 @@
-fn main() {
-    println!("Hello, world!");
-}
+// Will handle setup tasks. See `src/sqlite.rs` for the current implementation.
