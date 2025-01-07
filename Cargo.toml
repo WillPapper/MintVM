@@ -8,6 +8,7 @@ alloy = "0.9.2"
 anyhow = "1.0"
 derive_more = "1.0.0"
 hex = "0.4.3"
+http-body-util = "0.1.2"
 hyper = { version = "1.5", features = ["full"] }
 jsonrpsee = { version = "0.24", features = ["server", "client", "http-client", "ws-client"] }
 # `bundled` causes us to automatically compile and link in an up to date

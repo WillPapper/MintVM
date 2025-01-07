@@ -2,25 +2,29 @@
 // https://ethereum.org/en/developers/docs/apis/json-rpc/
 // Will read data via sqlite.rs. See `src/sqlite.rs` for the current
 // implementation.
-mod jsonrpc;
 
 use std::net::SocketAddr;
 use std::time::Duration;
 
 use hyper::body::Bytes;
+use hyper::Request;
+use http_body_util::Full;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::server::{RpcModule, Server};
 use jsonrpsee::ws_client::WsClientBuilder;
 use jsonrpsee::rpc_params;
 use tokio::task;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse};
 use tower_http::LatencyUnit;
 use tracing_subscriber::util::SubscriberInitExt;
 
 pub async fn run_server() -> anyhow::Result<()> {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()?
+    // Use a default filter if RUST_LOG is not set
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
         .add_directive("jsonrpsee[method_call{name = \"say_hello\"}]=trace".parse()?);
+
     tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(filter)
         .finish()
@@ -39,21 +43,20 @@ pub async fn run_server() -> anyhow::Result<()> {
 
     // Example HTTP client
     let http_client_url = format!("http://{}", http_addr);
-    let middleware = tower::ServiceBuilder::new()
-        .layer(
-            TraceLayer::new_for_http()
-                .on_request(|request: &hyper::Request<_>, _span: &tracing::Span| {
-                    tracing::info!(request = ?request, "on_request")
-                })
-                .on_body_chunk(|chunk: &Bytes, latency: Duration, _: &tracing::Span| {
-                    tracing::info!(size_bytes = chunk.len(), latency = ?latency, "sending body chunk")
-                })
-                .make_span_with(DefaultMakeSpan::new().include_headers(true))
-                .on_response(DefaultOnResponse::new().include_headers(true).latency_unit(LatencyUnit::Micros)),
-        );
     let http_client = HttpClient::builder()
-        .set_http_middleware(middleware)
         .build(http_client_url)?;
+
+    // Create a separate middleware for tracing the client requests
+    let _trace_layer = tower_http::trace::TraceLayer::new_for_http()
+        .on_request(|request: &Request<Full<Bytes>>, _span: &tracing::Span| {
+            tracing::info!(request = ?request, "on_request")
+        })
+        .on_body_chunk(|chunk: &Bytes, latency: Duration, _: &tracing::Span| {
+            tracing::info!(size_bytes = chunk.len(), latency = ?latency, "sending body chunk")
+        })
+        .make_span_with(DefaultMakeSpan::new().include_headers(true))
+        .on_response(DefaultOnResponse::new().include_headers(true).latency_unit(LatencyUnit::Micros));
+
     let response: Result<String, _> = http_client.request("say_hello", rpc_params![1_u64, 2, 3]).await;
     tracing::info!("HTTP client response: {:?}", response);
 
