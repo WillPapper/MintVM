@@ -1,15 +1,15 @@
 #![allow(unused)]
 #![allow(dead_code)]
 
-use rusqlite::{Connection, Result, ToSql};
-use rusqlite::types::{ToSqlOutput, FromSql};
-use serde::{Serialize, Deserialize};
-use thiserror::Error;
-use alloy::primitives::{Address, keccak256};
-use derive_more::{From, Display, FromStr};
-use rusqlite::Row;
+use alloy::primitives::{keccak256, Address};
+use derive_more::{Display, From, FromStr};
 use rusqlite::named_params;
+use rusqlite::types::{FromSql, ToSqlOutput};
+use rusqlite::Row;
+use rusqlite::{Connection, Result, ToSql};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, From, Display, FromStr, PartialEq)]
 #[display("{}", _0)]
@@ -107,7 +107,8 @@ impl FromSql for AddressSqliteList {
                 if bytes.len() % 20 != 0 {
                     return Err(rusqlite::types::FromSqlError::InvalidType);
                 }
-                let addresses = bytes.chunks_exact(20)
+                let addresses = bytes
+                    .chunks_exact(20)
                     .map(|chunk| {
                         let mut array = [0u8; 20];
                         array.copy_from_slice(chunk);
@@ -144,18 +145,16 @@ impl TryFrom<&Row<'_>> for Contracts {
 
 impl Contracts {
     fn get_by_id(conn: &Connection, id: i32) -> Result<Self, rusqlite::Error> {
-        conn.query_row(
-            "SELECT * FROM contracts WHERE id = ?",
-            [id],
-            |row| Self::try_from(row)
-        )
+        conn.query_row("SELECT * FROM contracts WHERE id = ?", [id], |row| {
+            Self::try_from(row)
+        })
     }
 
     fn get_by_address(conn: &Connection, address: AddressSqlite) -> Result<Self, rusqlite::Error> {
         conn.query_row(
             "SELECT * FROM contracts WHERE address = ?",
             [address],
-            |row| Self::try_from(row)
+            |row| Self::try_from(row),
         )
     }
 
@@ -163,7 +162,7 @@ impl Contracts {
         conn.query_row(
             "SELECT * FROM contracts WHERE transaction_id = ?",
             [tx_id],
-            |row| Self::try_from(row)
+            |row| Self::try_from(row),
         )
     }
 }
@@ -184,56 +183,60 @@ impl TryFrom<&Row<'_>> for Transactions {
 
 impl Transactions {
     fn get_by_id(conn: &Connection, id: i32) -> Result<Self, rusqlite::Error> {
-        conn.query_row(
-            "SELECT * FROM transactions WHERE id = ?",
-            [id],
-            |row| Self::try_from(row)
-        )
+        conn.query_row("SELECT * FROM transactions WHERE id = ?", [id], |row| {
+            Self::try_from(row)
+        })
     }
 
-    fn get_by_sender(conn: &Connection, sender: AddressSqlite) -> Result<Vec<Self>, rusqlite::Error> {
+    fn get_by_sender(
+        conn: &Connection,
+        sender: AddressSqlite,
+    ) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare("SELECT * FROM transactions WHERE sender = ?")?;
         let transactions_iter = stmt.query_map([sender], |row| Self::try_from(row))?;
-        
+
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 
-    fn get_by_type(conn: &Connection, tx_type: TransactionType) -> Result<Vec<Self>, rusqlite::Error> {
+    fn get_by_type(
+        conn: &Connection,
+        tx_type: TransactionType,
+    ) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare("SELECT * FROM transactions WHERE transaction_type = ?")?;
         let transactions_iter = stmt.query_map([tx_type], |row| Self::try_from(row))?;
-        
+
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 
     fn get_by_type_and_sender(
-        conn: &Connection, 
+        conn: &Connection,
         tx_type: TransactionType,
-        sender: AddressSqlite
+        sender: AddressSqlite,
     ) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare(
-            "SELECT * FROM transactions WHERE transaction_type = :type AND sender = :sender"
+            "SELECT * FROM transactions WHERE transaction_type = :type AND sender = :sender",
         )?;
-        let transactions_iter = stmt.query_map(
-            named_params! {":type": tx_type, ":sender": sender},
-            |row| Self::try_from(row)
-        )?;
-        
+        let transactions_iter = stmt
+            .query_map(named_params! {":type": tx_type, ":sender": sender}, |row| {
+                Self::try_from(row)
+            })?;
+
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 
     fn get_by_type_after_timestamp(
         conn: &Connection,
         tx_type: TransactionType,
-        timestamp: i64
+        timestamp: i64,
     ) -> Result<Vec<Self>, rusqlite::Error> {
         let mut stmt = conn.prepare(
-            "SELECT * FROM transactions WHERE transaction_type = :type AND timestamp > :ts"
+            "SELECT * FROM transactions WHERE transaction_type = :type AND timestamp > :ts",
         )?;
-        let transactions_iter = stmt.query_map(
-            named_params! {":type": tx_type, ":ts": timestamp},
-            |row| Self::try_from(row)
-        )?;
-        
+        let transactions_iter = stmt
+            .query_map(named_params! {":type": tx_type, ":ts": timestamp}, |row| {
+                Self::try_from(row)
+            })?;
+
         transactions_iter.collect::<Result<Vec<_>, _>>()
     }
 }
@@ -255,7 +258,7 @@ fn main() -> Result<(), DatabaseError> {
 
 fn initialize_db() -> Result<Connection, DatabaseError> {
     let conn = Connection::open_in_memory()?;
-    
+
     // Register custom functions first
     conn.create_scalar_function(
         "derive_contract_address",
@@ -263,41 +266,43 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
         rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
         |ctx| {
             let transaction_id: i64 = ctx.get::<i64>(0)?;
-            
+
             // CREATE2 address derivation
             // address = keccak256(0xff ++ deployerAddress ++ salt ++ keccak256(initCode))[12:]
-            
+
             // Using a fixed deployer address and init code for this example
             // In production, these should be parameters or configured constants
             // TODO: Change to sender of bridge address
             let deployer = AddressSqlite::from(
-                Address::from_str("0x4000000000000000000000000000000000000000").unwrap()
+                Address::from_str("0x4000000000000000000000000000000000000000").unwrap(),
             );
-            
+
             // This should be your actual contract init code
             // TODO: Change to ERC-721/20/1155 init code
-            let init_code = hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
-            
+            let init_code =
+                hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                    .unwrap();
+
             // Calculate keccak256(initCode)
             let init_code_hash = keccak256(&init_code);
-            
+
             // Prepare the CREATE2 input buffer
             let mut buffer = Vec::with_capacity(85); // 1 + 20 + 32 + 32
             buffer.push(0xff);
             buffer.extend_from_slice(deployer.0.as_slice());
-            
+
             // Use transaction_id as salt, padded to 32 bytes
             let mut salt = [0u8; 32];
             // We want to pad the address to the right so that transaction ID comes at the end
             salt[24..32].copy_from_slice(&transaction_id.to_be_bytes());
             buffer.extend_from_slice(&salt);
-            
+
             buffer.extend_from_slice(init_code_hash.as_slice());
-            
+
             // Calculate final hash and take last 20 bytes for the address
             let address_bytes = &keccak256(&buffer)[12..];
             Ok(address_bytes.to_vec())
-        }
+        },
     )?;
 
     // Change ID to use the ID from the smart contract once written
@@ -326,6 +331,17 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
         (),
     )?;
 
+    // Create a table for token balances
+    conn.execute(
+        "CREATE TABLE token_balances(
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER NOT NULL,
+            recipient BLOB NOT NULL,
+            balance INTEGER NOT NULL
+        )",
+        (),
+    )?;
+
     // Create a trigger to automatically create a new contract when a
     // TransactionType of CreateToken is inserted. Uses a custom function to
     // derive the contract address from the transaction ID
@@ -345,7 +361,10 @@ fn initialize_db() -> Result<Connection, DatabaseError> {
 }
 
 // Connection must be mutable because commitments mutate the connection
-fn insert_transaction(conn: &mut Connection, transaction: &Transactions) -> Result<(), DatabaseError> {
+fn insert_transaction(
+    conn: &mut Connection,
+    transaction: &Transactions,
+) -> Result<(), DatabaseError> {
     // Start a new transaction
     let tx = conn.transaction()?;
 
@@ -375,7 +394,9 @@ mod tests {
     #[test]
     fn test_insert_transaction() -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = initialize_db()?;
-        let sender = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
+        let sender = AddressSqlite::from(
+            Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
         let test_data = "0x".as_bytes().to_vec();
         let test_timestamp = 1715136000;
 
@@ -390,10 +411,13 @@ mod tests {
 
         // Use getter instead of direct row access
         let saved_transaction = Transactions::get_by_id(&conn, 1)?;
-        
+
         assert_eq!(saved_transaction.id, 1); // First record should have ID 1
         assert_eq!(saved_transaction.sender, sender);
-        assert_eq!(saved_transaction.transaction_type, TransactionType::CreateToken);
+        assert_eq!(
+            saved_transaction.transaction_type,
+            TransactionType::CreateToken
+        );
         assert_eq!(saved_transaction.data, test_data);
         assert_eq!(saved_transaction.timestamp, test_timestamp);
 
@@ -408,8 +432,10 @@ mod tests {
     #[test]
     fn test_get_contract() -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = initialize_db()?;
-        let sender = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        
+        let sender = AddressSqlite::from(
+            Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
+
         // First insert a transaction that will create a contract
         let transaction = Transactions {
             id: 0,
@@ -446,11 +472,15 @@ mod tests {
     #[test]
     fn test_multiple_transactions() -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = initialize_db()?;
-        
+
         // Create test data
-        let sender1 = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000001").unwrap());
-        let sender2 = AddressSqlite::from(Address::from_str("0x0000000000000000000000000000000000000002").unwrap());
-        
+        let sender1 = AddressSqlite::from(
+            Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+        );
+        let sender2 = AddressSqlite::from(
+            Address::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+        );
+
         let test_transactions = vec![
             Transactions {
                 id: 0,
@@ -488,11 +518,13 @@ mod tests {
         }
 
         // Test different query methods
-        
+
         // 1. Get all CreateToken transactions
         let create_txs = Transactions::get_by_type(&conn, TransactionType::CreateToken)?;
         assert_eq!(create_txs.len(), 2);
-        assert!(create_txs.iter().all(|tx| tx.transaction_type == TransactionType::CreateToken));
+        assert!(create_txs
+            .iter()
+            .all(|tx| tx.transaction_type == TransactionType::CreateToken));
 
         // 2. Get all transactions from sender1
         let sender1_txs = Transactions::get_by_sender(&conn, sender1)?;
@@ -500,20 +532,14 @@ mod tests {
         assert!(sender1_txs.iter().all(|tx| tx.sender == sender1));
 
         // 3. Get CreateToken transactions from sender2
-        let sender2_create_txs = Transactions::get_by_type_and_sender(
-            &conn,
-            TransactionType::CreateToken,
-            sender2
-        )?;
+        let sender2_create_txs =
+            Transactions::get_by_type_and_sender(&conn, TransactionType::CreateToken, sender2)?;
         assert_eq!(sender2_create_txs.len(), 1);
         assert_eq!(sender2_create_txs[0].data, b"token2");
 
         // 4. Get transactions after timestamp 1001
-        let recent_txs = Transactions::get_by_type_after_timestamp(
-            &conn,
-            TransactionType::CreateToken,
-            1001
-        )?;
+        let recent_txs =
+            Transactions::get_by_type_after_timestamp(&conn, TransactionType::CreateToken, 1001)?;
         assert_eq!(recent_txs.len(), 1);
         assert_eq!(recent_txs[0].sender, sender2);
 
